@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Automated Attendance for Rural Schools</title>
+  <style>
+    body { font-family: Arial, sans-serif; background:#f3f4f6; margin:0; padding:20px; }
+    h1 { text-align:center; margin-bottom:20px; }
+    .card { background:#fff; padding:20px; border-radius:12px; box-shadow:0 2px 6px rgba(0,0,0,0.1); margin:auto; max-width:700px; }
+    .btn { padding:8px 12px; border:none; border-radius:6px; cursor:pointer; font-size:14px; }
+    .btn-blue { background:#2563eb; color:#fff; }
+    .btn-green { background:#16a34a; color:#fff; }
+    .btn-gray { background:#d1d5db; }
+    ul { list-style:none; padding:0; }
+    li { padding:8px; margin:6px 0; border-radius:6px; background:#f9fafb; display:flex; justify-content:space-between; align-items:center; }
+    .dropdown { position:relative; display:inline-block; }
+    .dropdown-menu { display:none; position:absolute; background:#fff; border:1px solid #ddd; border-radius:6px; box-shadow:0 2px 6px rgba(0,0,0,0.1); min-width:120px; z-index:10; }
+    .dropdown-menu button { display:block; width:100%; border:none; background:none; text-align:left; padding:6px 10px; cursor:pointer; }
+    .dropdown-menu button:hover { background:#f3f4f6; }
+    .present { color:green; font-weight:bold; }
+    .absent { color:red; font-weight:bold; }
+    .hidden { display:none; }
+  </style>
+</head>
+<body>
+  <h1>Automated Attendance for Rural Schools</h1>
+
+  <div id="login" class="card">
+    <h2 style="text-align:center;">Login</h2>
+    <p style="text-align:center; color:gray;">Select your role to continue</p>
+    <div style="display:flex; justify-content:center; gap:10px;">
+      <button class="btn btn-blue" onclick="setRole('student')">Student Login</button>
+      <button class="btn btn-green" onclick="setRole('teacher')">Teacher Login</button>
+    </div>
+  </div>
+
+  <!-- Student Dashboard -->
+  <div id="studentDashboard" class="card hidden">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <h2>Student Dashboard</h2>
+      <div>
+        <label>Filter Class:</label>
+        <select id="studentClassFilter" onchange="renderStudents()"></select>
+      </div>
+    </div>
+    <ul id="studentList"></ul>
+    <button class="btn btn-gray" onclick="logout()">Back</button>
+  </div>
+
+  <!-- Teacher Dashboard -->
+  <div id="teacherDashboard" class="card hidden">
+    <h2>Teacher Dashboard</h2>
+    <div>
+      <label>Filter by Class:</label>
+      <select id="teacherClassFilter" onchange="renderTeacher()"></select>
+    </div>
+
+    <div style="margin-top:15px; border:1px solid #ddd; padding:10px; border-radius:8px;">
+      <h3>Class Summary</h3>
+      <p>Total Present: <span id="totalPresent">0</span></p>
+      <p>Total Absent: <span id="totalAbsent">0</span></p>
+      <ul id="classSummary"></ul>
+    </div>
+
+    <div style="margin-top:15px; border:1px solid #ddd; padding:10px; border-radius:8px;">
+      <h3>Live Attendance Log</h3>
+      <ul id="classLog"></ul>
+    </div>
+
+    <div style="margin-top:15px; border:1px solid #ddd; padding:10px; border-radius:8px;">
+      <h3>Overall Attendance Log</h3>
+      <ul id="allLog"></ul>
+    </div>
+
+    <div style="margin-top:15px; border:1px solid #ddd; padding:10px; border-radius:8px;">
+      <h3>Parent Notifications</h3>
+      <ul id="messages"></ul>
+    </div>
+
+    <button class="btn btn-gray" onclick="logout()">Back</button>
+  </div>
+
+  <script>
+    const students = [
+      { id: "S101", name: "Anitha", class: "10-A", preferredMethod: "RFID", lastSeen: null },
+      { id: "S102", name: "Ravi", class: "10-A", preferredMethod: "Face Recognition", lastSeen: null },
+      { id: "S103", name: "Kumar", class: "10-B", preferredMethod: "Biometric", lastSeen: null },
+      { id: "S104", name: "Priya", class: "10-B", preferredMethod: "RFID", lastSeen: null },
+      { id: "S105", name: "Lakshmi", class: "9-A", preferredMethod: "RFID", lastSeen: null },
+      { id: "S106", name: "Mani", class: "9-B", preferredMethod: "Face Recognition", lastSeen: null },
+    ];
+
+    let attendanceLog = [];
+    let messages = [];
+    let userRole = null;
+
+    function setRole(role) {
+      userRole = role;
+      document.getElementById("login").classList.add("hidden");
+      if (role === "student") {
+        document.getElementById("studentDashboard").classList.remove("hidden");
+        populateClassFilters("studentClassFilter");
+        renderStudents();
+      } else {
+        document.getElementById("teacherDashboard").classList.remove("hidden");
+        populateClassFilters("teacherClassFilter");
+        renderTeacher();
+      }
+    }
+
+    function logout() {
+      userRole = null;
+      document.getElementById("login").classList.remove("hidden");
+      document.getElementById("studentDashboard").classList.add("hidden");
+      document.getElementById("teacherDashboard").classList.add("hidden");
+    }
+
+    function populateClassFilters(selectId) {
+      const select = document.getElementById(selectId);
+      select.innerHTML = "";
+      const optionAll = document.createElement("option");
+      optionAll.value = "All";
+      optionAll.textContent = "All";
+      select.appendChild(optionAll);
+      [...new Set(students.map(s => s.class))].forEach(cls => {
+        const opt = document.createElement("option");
+        opt.value = cls;
+        opt.textContent = cls;
+        select.appendChild(opt);
+      });
+    }
+
+    function renderStudents() {
+      const filter = document.getElementById("studentClassFilter").value || "All";
+      const list = document.getElementById("studentList");
+      list.innerHTML = "";
+
+      const shown = filter === "All" ? students : students.filter(s => s.class === filter);
+
+      shown.forEach(s => {
+        const li = document.createElement("li");
+        li.innerHTML = `
+          <div>
+            <div><strong>${s.name} (${s.id})</strong></div>
+            <div style="font-size:12px; color:gray;">Class ${s.class} • Prefers ${s.preferredMethod} • Last: ${s.lastSeen ? new Date(s.lastSeen).toLocaleTimeString() : "—"}</div>
+            <div class="dropdown">
+              <button class="btn btn-gray" onclick="togglePrefMenu('${s.id}')">Prefers: ${s.preferredMethod} ▾</button>
+              <div id="prefMenu-${s.id}" class="dropdown-menu">
+                <button onclick="updatePreference('${s.id}','RFID')">RFID</button>
+                <button onclick="updatePreference('${s.id}','Face Recognition')">Face Recognition</button>
+                <button onclick="updatePreference('${s.id}','Biometric')">Biometric</button>
+              </div>
+            </div>
+          </div>
+          <button class="btn btn-blue" onclick="simulateCheckIn('${s.id}')">Check In</button>
+        `;
+        list.appendChild(li);
+      });
+    }
+
+    function togglePrefMenu(id) {
+      document.querySelectorAll(".dropdown-menu").forEach(m => m.style.display="none");
+      const menu = document.getElementById("prefMenu-"+id);
+      menu.style.display = menu.style.display === "block" ? "none" : "block";
+    }
+
+    function updatePreference(studentId, method) {
+      const s = students.find(x => x.id === studentId);
+      if (s) s.preferredMethod = method;
+      renderStudents();
+    }
+
+    function simulateCheckIn(studentId) {
+      const student = students.find(s => s.id === studentId);
+      const time = new Date();
+      student.lastSeen = time;
+      attendanceLog.push({ id: student.id, method: student.preferredMethod, timestamp: time });
+      messages.push(`Message to parent: ${student.name} is marked PRESENT at ${time.toLocaleTimeString()}`);
+      renderStudents();
+      renderTeacher();
+    }
+
+    function renderTeacher() {
+      const filter = document.getElementById("teacherClassFilter").value || "All";
+      const shown = filter === "All" ? students : students.filter(s => s.class === filter);
+
+      const present = shown.filter(s => s.lastSeen).length;
+      document.getElementById("totalPresent").textContent = present;
+      document.getElementById("totalAbsent").textContent = shown.length - present;
+
+      const summary = document.getElementById("classSummary");
+      summary.innerHTML = "";
+      shown.forEach(s => {
+        const li = document.createElement("li");
+        li.className = s.lastSeen ? "present" : "absent";
+        li.textContent = `${s.name} (${s.id}) - ${s.lastSeen ? "Present" : "Absent"}`;
+        summary.appendChild(li);
+      });
+
+      const classLog = document.getElementById("classLog");
+      classLog.innerHTML = "";
+      const logFiltered = filter==="All" ? attendanceLog : attendanceLog.filter(r => students.find(s=>s.id===r.id)?.class === filter);
+      if (logFiltered.length===0) classLog.innerHTML = "<li style='color:gray;'>No records yet</li>";
+      logFiltered.forEach(r => {
+        const stu = students.find(s=>s.id===r.id);
+        const li = document.createElement("li");
+        li.innerHTML = `${stu.name} (${stu.class}) • ${r.method} <span style="font-size:12px; color:gray;">${new Date(r.timestamp).toLocaleTimeString()}</span>`;
+        classLog.appendChild(li);
+      });
+
+      const allLog = document.getElementById("allLog");
+      allLog.innerHTML = "";
+      if (attendanceLog.length===0) allLog.innerHTML = "<li style='color:gray;'>No records yet</li>";
+      attendanceLog.forEach(r => {
+        const stu = students.find(s=>s.id===r.id);
+        const li = document.createElement("li");
+        li.innerHTML = `${stu.name} (${stu.class}) • ${r.method} <span style="font-size:12px; color:gray;">${new Date(r.timestamp).toLocaleTimeString()}</span>`;
+        allLog.appendChild(li);
+      });
+
+      const msgList = document.getElementById("messages");
+      msgList.innerHTML = "";
+      if (messages.length===0) msgList.innerHTML = "<li style='color:gray;'>No messages sent yet</li>";
+      messages.forEach(m => {
+        const li = document.createElement("li");
+        li.textContent = m;
+        msgList.appendChild(li);
+      });
+    }
+  </script>
+</body>
+</html>
